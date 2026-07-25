@@ -58,7 +58,13 @@ const MAX_PDF_TEXT_ENTRIES = 30;
 //     existing BoardData.surfaces channel.
 // 83: XZZ parser extracts component value from 2nd 0x06 label sub-block (or
 //     first non-RefDes label) into Part.meta.value.
-const PARSER_VERSION = 83;
+// 84: XZZ oblong-pad guard (normalizeOblongPads, see v81) made axis-symmetric
+//     — it assumed padW was always the short/pen axis and unconditionally
+//     collapsed anything with padH <= padW as "degenerate". Real pads with
+//     padW > padH (HAC-CPU-20 connector mounting pins N575/N578/N581,
+//     71×20 mil) were being flattened into round dots; boards cached under
+//     v81/v82/v83 need a re-parse to pick up the corrected geometry.
+const PARSER_VERSION = 84;
 
 interface CachedBoard {
   key: string;

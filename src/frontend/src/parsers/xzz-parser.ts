@@ -531,14 +531,19 @@ export interface OblongPinLike {
 
 /** Oblong-pad plausibility guard.
  *
- *  Shape 0x01 with w ≠ h is a round-capped stroke (stadium): `w` is the pen
- *  width, `h` the stroke length, rotated by padAngleDeg. Every oblong entry
- *  in the surveyed corpus (PL5TU1B) carries the same 15-mil pen width with
- *  lengths 1–350 mil. Real for chip pads (15×20…40) and QFP leads (15×60,
- *  matches the vendor's assembly drawing) — but bogus on BGA perimeter
- *  rings, where 15×300/350 "pads" would cross a dozen neighbouring balls
- *  the vendor's own drawing shows as plain 15-mil dots (probably escape-stub
- *  metadata, not pad copper).
+ *  Shape 0x01 with w ≠ h is a round-capped stroke (stadium). Per the general
+ *  capsule rule (see capsuleParams()/drawPadShape's 'round' case), the pen
+ *  width is whichever of w/h is SHORTER and the stroke length is whichever
+ *  is LONGER — there is no fixed axis. An earlier version of this guard
+ *  assumed `w` was always the pen and `h` always the length (true for every
+ *  oblong entry in the PL5TU1B/EC1/CPU1 corpus, which happened to have
+ *  w < h everywhere) and unconditionally collapsed any pin where h <= w as
+ *  a "degenerate stroke". That assumption broke on HAC-CPU-20's connector
+ *  mounting pins (e.g. part C-01-04 / pin N581: 71x20 mil, through-hole),
+ *  where w is the LONGER axis — the old code flattened a real capsule pad
+ *  into a 71-mil round dot. Working in min/max terms instead makes "length
+ *  shorter than pen" geometrically impossible by construction, so that
+ *  branch is gone; real noise is still caught by the physical check below.
  *
  *  Copper pads of different pins can never overlap, so the guard is
  *  physical: a pin's oblong footprint (w×h box at the pad angle) must not
@@ -548,14 +553,15 @@ export interface OblongPinLike {
  *  exporter stamps ONE angle on every pin of a part while a QFP's top/bottom
  *  leads are physically perpendicular to its left/right leads; an oblong
  *  only collapses to a pen-width round dot when neither orientation is
- *  physically possible. Degenerate strokes (h ≤ w, e.g. 15×1) collapse
- *  unconditionally. A final majority pass drags stragglers along: the
- *  exporter writes one length for a whole ring/side, so when most pins of
- *  an identical (w, h) group prove implausible, the survivors (stubs that
- *  happen to thread a gap in a staggered ball grid — CPU1 pin W1) are the
- *  same bogus population and collapse too. Must run BEFORE the butterfly
- *  fold: the geometry assumes positions and angles from the same
- *  (un-mirrored) frame.
+ *  physically possible (15×300/350 BGA-perimeter stubs that would cross a
+ *  dozen neighbouring balls — the vendor's own drawing shows plain 15-mil
+ *  dots there, probably escape-stub metadata, not pad copper). A final
+ *  majority pass drags stragglers along: the exporter writes one length for
+ *  a whole ring/side, so when most pins of an identical (w, h) group prove
+ *  implausible, the survivors (stubs that happen to thread a gap in a
+ *  staggered ball grid — CPU1 pin W1) are the same bogus population and
+ *  collapse too. Must run BEFORE the butterfly fold: the geometry assumes
+ *  positions and angles from the same (un-mirrored) frame.
  *
  *  Mutates `pins` in place; returns how many pads were collapsed. */
 export function normalizeOblongPads(pins: OblongPinLike[]): number {
@@ -579,19 +585,22 @@ export function normalizeOblongPads(pins: OblongPinLike[]): number {
     }
     return true;
   };
+  // Collapse to a round dot sized to the pen (shorter) axis — not
+  // necessarily padW; whichever of padW/padH is smaller is the true pen size.
+  const collapseToPen = (p: OblongPinLike): void => {
+    const pen = Math.min(p.padW, p.padH);
+    p.padW = pen;
+    p.padH = pen;
+    p.padAngleDeg = 0;
+    collapsed++;
+  };
   // Per-(w,h) group stats for the majority pass. Survivors keep a reference
-  // under their ORIGINAL size key (mutation changes p.padH).
+  // under their ORIGINAL size key (mutation changes p.padW/padH).
   const groupTotal = new Map<string, number>();
   const groupCollapsed = new Map<string, number>();
   const groupSurvivors = new Map<string, OblongPinLike[]>();
   for (const p of pins) {
     if (p.padShape !== 'round' || p.padW <= 0 || p.padH <= 0 || p.padW === p.padH) continue;
-    if (p.padH <= p.padW) {                          // degenerate stroke → dot
-      p.padH = p.padW;
-      p.padAngleDeg = 0;
-      collapsed++;
-      continue;
-    }
     const key = `${p.padW}x${p.padH}`;
     groupTotal.set(key, (groupTotal.get(key) ?? 0) + 1);
     if (plausibleAt(p, p.padAngleDeg) ||
@@ -602,9 +611,7 @@ export function normalizeOblongPads(pins: OblongPinLike[]): number {
       list.push(p);
       continue;
     }
-    p.padH = p.padW;
-    p.padAngleDeg = 0;
-    collapsed++;
+    collapseToPen(p);
     groupCollapsed.set(key, (groupCollapsed.get(key) ?? 0) + 1);
   }
   // Majority pass: a size-group that is mostly implausible is exporter
@@ -612,9 +619,7 @@ export function normalizeOblongPads(pins: OblongPinLike[]): number {
   for (const [key, bad] of groupCollapsed) {
     if (bad * 2 <= (groupTotal.get(key) ?? 0)) continue;
     for (const p of groupSurvivors.get(key) ?? []) {
-      p.padH = p.padW;
-      p.padAngleDeg = 0;
-      collapsed++;
+      collapseToPen(p);
     }
   }
   return collapsed;

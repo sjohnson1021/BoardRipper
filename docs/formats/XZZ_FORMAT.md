@@ -150,8 +150,9 @@ Within a part block, pins are encoded as typed sub-blocks:
 ```
 
 **Oblong pads (shape 0x01 with w ≠ h).** Shape `0x01` is not strictly a
-circle: with w ≠ h it encodes a round-capped stroke (stadium) — `w` is the
-pen width, `h` the stroke length, rotated by `padAngle` CCW. The surveyed
+circle: with w ≠ h it encodes a round-capped stroke (stadium) — the shorter
+of w/h is the pen width and the longer is the stroke length, rotated by
+`padAngle` CCW; there is no fixed axis. The surveyed
 MECHREVO corpus (PL5TU1B) writes a constant 15-mil pen with lengths 1–350
 mil. Renderer draws these as rotated capsules (`capsuleParams` in
 `renderer/pad-capsule.ts`). Three caveats, handled by
@@ -164,8 +165,11 @@ mil. Renderer draws these as rotated capsules (`capsuleParams` in
 2. **One angle per part.** The exporter stamps a single `padAngle` on every
    pin of a part, but a QFP's top/bottom leads are physically perpendicular
    to its left/right leads (EC1: all 128 pins say 270°).
-3. **Degenerate strokes** (h ≤ w, e.g. 15×1) — effectively dots drawn with
-   the 15-mil pen.
+3. **Either axis can be the pen.** Real pads exist with w > h — `HAC-CPU-20`'s
+   connector mounting legs are 71×20 mil. An earlier guard assumed `w` was
+   always the pen and collapsed anything with h ≤ w as a "degenerate stroke",
+   flattening those into 71-mil dots. Working in min/max terms makes "length
+   shorter than pen" impossible by construction.
 
 The guard is physical — copper pads of different pins can never overlap:
 an oblong is kept at its declared angle if it touches no same-part

@@ -73,11 +73,30 @@ describe('normalizeOblongPads (XZZ oblong-pad plausibility guard)', () => {
     expect(pins[1].padH).toBe(20);
   });
 
-  it('collapses degenerate stroke lengths (h ≤ w, e.g. 15×1) to a pen-width dot', () => {
-    const pins = [pin({ padH: 1 }), pin({ x: 100, padH: 8 })];
+  it('keeps an isolated oblong pad where w > h (HAC-CPU-20 N581: 71x20 mil connector mounting pin, through-hole)', () => {
+    // Regression for the axis assumption bug: the guard used to assume padW
+    // was always the pen (shorter) axis and collapsed anything with
+    // padH <= padW as a "degenerate stroke". Real board data breaks that —
+    // this pin's pen axis is padH (20), and the stroke axis is padW (71).
+    // Isolated (no neighbours), so it must survive intact regardless of
+    // which field is bigger.
+    const n581 = pin({ x: 5700, y: 5006, padW: 71, padH: 20, padAngleDeg: 90 });
+    normalizeOblongPads([n581]);
+    expect(n581.padW).toBe(71);
+    expect(n581.padH).toBe(20);
+    expect(n581.padAngleDeg).toBe(90);
+  });
+
+  it('collapses an isolated oblong pad only when a neighbour makes both orientations implausible', () => {
+    // Unlike the old code, a lone pin is never collapsed just because
+    // padH <= padW — physical implausibility (an overlapping neighbour) is
+    // what triggers collapse now. A pin with no neighbours at all is always
+    // kept, whichever axis is longer.
+    const pins = [pin({ padW: 15, padH: 1 }), pin({ x: 100, padW: 8, padH: 15 })];
     normalizeOblongPads(pins);
-    expect(pins[0].padH).toBe(15);
     expect(pins[0].padW).toBe(15);
+    expect(pins[0].padH).toBe(1);
+    expect(pins[1].padW).toBe(8);
     expect(pins[1].padH).toBe(15);
   });
 
