@@ -835,16 +835,17 @@ interface ViaData { x: number; y: number; outer: number; netIndex: number; }
  *   [12..16) u32  drill diameter (÷10000 = mils)  — unused, the renderer
  *                                                   derives drill as a fixed
  *                                                   ratio of the pad ring.
- *   [16..20) u32  layer-from / flag (always 1 in surveyed Apple files)
- *   [20..24) u32  layer-to   / flag (always 5 in surveyed Apple files)
+ *   [16..20) u32  layer-from (copper layer index)
+ *   [20..24) u32  layer-to   (copper layer index)
  *   [24..28) u32  net index  (matches netDict)
  *   [28..32) u32  padding
  *
  * Surveyed on A2442 820-02098-A (17,273 vias). Coordinate space matches the
- * part / segment blocks. The layer-pair fields stay flag-coded (1, 5) on every
- * via sampled — without a board exposing real blind/buried stack-ups we can't
- * confirm whether they're [from, to] or constant. Treat as through-hole and
- * leave `Via.layers` empty until counter-evidence appears.
+ * part / segment blocks. The layer pair reads as a constant (1, 5) across that
+ * Apple corpus, but HAC-CPU-20 spans 25 distinct pairs over its 2559 vias
+ * (always from < to, every value also present in that board's trace-segment
+ * layers) — they are real blind/buried spans, not flags. Still skipped here, so
+ * `Via.layers` stays empty and every via renders through-hole.
  */
 function parseViaBlock(data: Uint8Array): ViaData | null {
   if (data.length < 28) return null;
