@@ -35,7 +35,7 @@ import {
 } from '../store/render-settings';
 import type { RenderSettings } from '../store/render-settings';
 import { pushLabel, sortLabelModel, type LabelModel } from './label-model';
-import { capsuleParams } from './pad-capsule';
+import { capsuleParams, isOblongRoundPad } from './pad-capsule';
 import { DEFAULT_LAYER_PALETTE } from '../store/layer-store';
 import { themeStore, hexToInt } from '../store/themes';
 
@@ -190,6 +190,40 @@ export interface PadGeometry {
    *  octagonal copper). When present, drawPadShape traces the actual outline
    *  rather than the AABB rectangle. */
   polygon?: { x: number; y: number }[];
+}
+
+/** Draws a pin-shaped primitive: a capsule for oblong round pads, otherwise
+ *  a plain circle of `radius` (the caller resolves any padding into `radius`
+ *  itself; `grow` pads the capsule, which has no single scalar radius).
+ *
+ *  Every "pin-shaped blob, not a full rect/poly pad" call site goes through
+ *  here — the base pin sprite, and BoardRenderer's selection/net/search/disco
+ *  halos and cross-side ghosts. Each used to carry its own circle-only copy
+ *  of this decision, so when the base sprite started drawing capsules the
+ *  halos kept stamping a pen-radius circle in the capsule's waist (visible on
+ *  XZZ through-hole mounting pins). Callers needing a square/rect/poly
+ *  override branch before calling this. */
+export function drawPinShape(
+  gfx: Graphics,
+  pin: Pick<Pin, 'position' | 'padShape' | 'padWidth' | 'padHeight' | 'padAngleDeg'>,
+  radius: number,
+  grow = 0,
+): void {
+  if (isOblongRoundPad(pin)) {
+    const halfW = pin.padWidth! / 2, halfH = pin.padHeight! / 2;
+    drawPadShape(gfx, {
+      bounds: {
+        minX: pin.position.x - halfW, maxX: pin.position.x + halfW,
+        minY: pin.position.y - halfH, maxY: pin.position.y + halfH,
+      },
+      shape: 'round',
+      width: pin.padWidth,
+      height: pin.padHeight,
+      angleDeg: pin.padAngleDeg,
+    }, grow);
+  } else {
+    gfx.circle(pin.position.x, pin.position.y, radius);
+  }
 }
 
 export function drawPadShape(gfx: Graphics, p: PadGeometry, grow = 0): void {
@@ -1366,22 +1400,22 @@ export function buildBoardScene(
           r = Math.min(r, Math.min(pin.padWidth, pin.padHeight) / 2);
         }
         const padShape = override?.padShape ?? 'natural';
+        // Oblong round pads keep their real stadium shape rather than being
+        // inscribed as a circle at the shorter dimension; square override wins.
+        const drawPin = (gfx: Graphics, rad: number, grow: number): void => {
+          if (padShape === 'square') {
+            gfx.rect(pin.position.x - rad, pin.position.y - rad, rad * 2, rad * 2);
+          } else {
+            drawPinShape(gfx, pin, rad, grow);
+          }
+        };
         if (isNcPin) {
           // Inset by half stroke width so outer edge aligns with filled pins of same radius
           const ncInset = Math.max(0.15, s.pinMinRadius * 0.06);
-          const ri = r - ncInset;
-          if (padShape === 'square') {
-            ncGfx.rect(pin.position.x - ri, pin.position.y - ri, ri * 2, ri * 2);
-          } else {
-            ncGfx.circle(pin.position.x, pin.position.y, ri);
-          }
+          drawPin(ncGfx, r - ncInset, -ncInset);
         } else {
           const pinGfx = getGridPinGfx(isBottom, color, pin.position.x, pin.position.y);
-          if (padShape === 'square') {
-            pinGfx.rect(pin.position.x - r, pin.position.y - r, r * 2, r * 2);
-          } else {
-            pinGfx.circle(pin.position.x, pin.position.y, r);
-          }
+          drawPin(pinGfx, r, 0);
         }
       }
 

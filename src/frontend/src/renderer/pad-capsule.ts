@@ -8,6 +8,7 @@
  *  Pure math kept out of board-scene.ts so it can be unit-tested without
  *  importing pixi.js.
  */
+import type { Pin } from '../parsers/types';
 
 export interface CapsuleParams {
   /** First end-cap centre. */
@@ -18,6 +19,16 @@ export interface CapsuleParams {
   r: number;
   /** Direction from c1 to c2 in radians. */
   axisRad: number;
+}
+
+/** True when a pin's pad is an oblong "round" pad — a capsule rather than a
+ *  plain circle. Kept beside capsuleParams so the pin layer and every
+ *  selection/highlight overlay test the same condition (see drawPinShape). */
+export function isOblongRoundPad(pin: Pick<Pin, 'padShape' | 'padWidth' | 'padHeight'>): boolean {
+  return pin.padShape === 'round'
+    && pin.padWidth != null && pin.padHeight != null
+    && pin.padWidth > 0 && pin.padHeight > 0
+    && pin.padWidth !== pin.padHeight;
 }
 
 /** Compute the two end-cap centres + radius of the stadium inscribed in the

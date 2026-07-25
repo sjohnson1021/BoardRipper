@@ -1,5 +1,27 @@
 import { describe, it, expect } from 'vitest';
-import { capsuleParams } from './pad-capsule';
+import { capsuleParams, isOblongRoundPad } from './pad-capsule';
+
+describe('isOblongRoundPad', () => {
+  it('is true for a round pad with padWidth != padHeight (capsule/stadium)', () => {
+    expect(isOblongRoundPad({ padShape: 'round', padWidth: 71, padHeight: 20 })).toBe(true);
+    expect(isOblongRoundPad({ padShape: 'round', padWidth: 20, padHeight: 71 })).toBe(true);
+  });
+
+  it('is false for a square round pad (plain circle)', () => {
+    expect(isOblongRoundPad({ padShape: 'round', padWidth: 15, padHeight: 15 })).toBe(false);
+  });
+
+  it('is false for non-round pad shapes', () => {
+    expect(isOblongRoundPad({ padShape: 'rect', padWidth: 71, padHeight: 20 })).toBe(false);
+    expect(isOblongRoundPad({ padShape: 'poly', padWidth: 71, padHeight: 20 })).toBe(false);
+  });
+
+  it('is false when dimensions are missing or non-positive', () => {
+    expect(isOblongRoundPad({ padShape: 'round' })).toBe(false);
+    expect(isOblongRoundPad({ padShape: 'round', padWidth: 0, padHeight: 20 })).toBe(false);
+    expect(isOblongRoundPad({ padShape: 'round', padWidth: 71, padHeight: -1 })).toBe(false);
+  });
+});
 
 describe('capsuleParams (oblong round-pad stadium geometry)', () => {
   it('returns null for square round pads (circle path)', () => {
