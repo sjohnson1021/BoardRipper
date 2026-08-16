@@ -201,6 +201,55 @@ const decoder = new TextDecoder('utf-8', { fatal: false });
 
 export interface Segment { p1: Point; p2: Point; }
 
+/** Canonical sweep of an XZZ arc: the **counterclockwise** span from `startDeg`
+ *  to `endDeg`, normalised into `[0, 360)`.
+ *
+ *  An arc stored as (center, radius, start, end) names two arcs — the CCW one and
+ *  the CW one — so the normalisation *is* the choice of which one gets drawn. Any
+ *  rule that reduces the span below 180° ("shortest arc") silently substitutes the
+ *  complement for every major arc, and any `swap`/`abs` on the endpoints throws
+ *  away the direction that distinguishes them. Both are required to be absent:
+ *  lift negatives, never reduce. See `docs/formats/XZZ_FORMAT.md` § Arc sweep
+ *  direction for the six-arc test vector this rule is pinned to.
+ */
+export function xzzArcSweepDeg(startDeg: number, endDeg: number): number {
+  const sweep = endDeg - startDeg;
+  return sweep < 0 ? sweep + 360 : sweep;
+}
+
+/** Linearise an XZZ arc into `n + 1` points along its canonical CCW sweep. */
+export function sampleXZZArc(
+  cx: number, cy: number, r: number,
+  startDeg: number, endDeg: number, n: number,
+): Point[] {
+  const start = startDeg * Math.PI / 180;
+  const sweep = xzzArcSweepDeg(startDeg, endDeg) * Math.PI / 180;
+  const pts: Point[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = start + sweep * (i / n);
+    pts.push({ x: cx + r * Math.cos(t), y: cy + r * Math.sin(t) });
+  }
+  return pts;
+}
+
+/** Chain an arc's samples into `n` segments, every endpoint its own `Point`.
+ *
+ *  Adjacent segments must NOT share the joint Point object even though it is
+ *  geometrically one point. Both coordinate passes downstream — the butterfly
+ *  mirror (`p.x = 2 * axis - p.x`) and the origin normalisation (`p.x -= minX`)
+ *  — walk the segment list and mutate `p1` and `p2` in place, so a shared joint
+ *  is transformed twice and lands a whole board-width away from its neighbours.
+ */
+export function xzzArcSegments(
+  cx: number, cy: number, r: number,
+  startDeg: number, endDeg: number, n: number,
+): Segment[] {
+  const pts = sampleXZZArc(cx, cy, r, startDeg, endDeg, n);
+  const segs: Segment[] = [];
+  for (let i = 0; i < n; i++) segs.push({ p1: { ...pts[i] }, p2: { ...pts[i + 1] } });
+  return segs;
+}
+
 /** Group outline segments into connected components via endpoint-proximity union-find.
  *  Two segments share a component if any endpoint-pair is within `eps` mils.
  *  Exported for the parity test in xzz-cluster.test.ts. */
@@ -1447,44 +1496,29 @@ export function parseXZZ(buffer: ArrayBuffer): BoardData {
         // XZZ_GLOBAL_SCALE (10000). The wrong divisor wrapped arcs through
         // Math.cos/sin to produce random geometry — the "star bursts" seen in
         // the rendered outline on iPhone files.
-        let startDeg = ri32(blockData, 16) / XZZ_SCALE;
-        let endDeg   = ri32(blockData, 20) / XZZ_SCALE;
-        if (startDeg > endDeg) [startDeg, endDeg] = [endDeg, startDeg];
-        if (endDeg - startDeg > 180) startDeg += 360;
-        const sRad = startDeg * Math.PI / 180;
-        const eRad = endDeg   * Math.PI / 180;
+        const startDeg = ri32(blockData, 16) / XZZ_SCALE;
+        const endDeg   = ri32(blockData, 20) / XZZ_SCALE;
         // Trace width + net index live past the core arc fields (blocks are
         // 32 bytes = 8×u32 on multi-layer files). Read when present.
         const width    = blockData.length >= 28 ? ru32(blockData, 24) / XZZ_SCALE : 0;
         const netIndex = blockData.length >= 32 ? ru32(blockData, 28) : 0;
         const N = 9; // 9 sub-segments (10 points) — matches OBV numPoints
         if (layer === OUTLINE_LAYER) {
-          for (let i = 0; i < N; i++) {
-            const t0 = sRad + (eRad - sRad) * i / N;
-            const t1 = sRad + (eRad - sRad) * (i + 1) / N;
-            segments.push({
-              p1: { x: cx + r * Math.cos(t0), y: cy + r * Math.sin(t0) },
-              p2: { x: cx + r * Math.cos(t1), y: cy + r * Math.sin(t1) },
-            });
-          }
+          for (const s of xzzArcSegments(cx, cy, r, startDeg, endDeg, N)) segments.push(s);
         } else if (layer === SILKSCREEN_LAYER) {
           // Silkscreen arc — linearize and route to the silkscreen overlay.
-          let px = cx + r * Math.cos(sRad), py = cy + r * Math.sin(sRad);
-          for (let i = 1; i <= N; i++) {
-            const t = sRad + (eRad - sRad) * i / N;
-            const nx = cx + r * Math.cos(t), ny = cy + r * Math.sin(t);
-            silkSegments.push({ p1: { x: px, y: py }, p2: { x: nx, y: ny } });
-            px = nx; py = ny;
-          }
+          for (const s of xzzArcSegments(cx, cy, r, startDeg, endDeg, N)) silkSegments.push(s);
         } else if (layer >= 1 && layer <= 16) {
           // Trace arc on a copper / mask layer — linearize into trace segments
-          // with the arc's width + net-index attached.
-          let px = cx + r * Math.cos(sRad), py = cy + r * Math.sin(sRad);
-          for (let i = 1; i <= N; i++) {
-            const t = sRad + (eRad - sRad) * i / N;
-            const nx = cx + r * Math.cos(t), ny = cy + r * Math.sin(t);
-            rawTraces.push({ rawLayer: layer, x1: px, y1: py, x2: nx, y2: ny, width, netIndex });
-            px = nx; py = ny;
+          // with the arc's width + net-index attached. Traces copy the
+          // coordinates out as numbers, so they don't share Point identity.
+          const pts = sampleXZZArc(cx, cy, r, startDeg, endDeg, N);
+          for (let i = 0; i < N; i++) {
+            rawTraces.push({
+              rawLayer: layer,
+              x1: pts[i].x, y1: pts[i].y, x2: pts[i + 1].x, y2: pts[i + 1].y,
+              width, netIndex,
+            });
           }
         }
         break;
@@ -1850,7 +1884,23 @@ export function parseXZZ(buffer: ArrayBuffer): BoardData {
   // nearest-neighbor chaining from drawing long-distance "spaghetti" between
   // disconnected board halves (MacBook unfolded butterfly) or between
   // independent boards in a multi-board file (iPhone AP+BB sandwich).
+  {
+    const bb = (pts: Array<{ x: number; y: number }>, l: string) => {
+      let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity, n = 0;
+      for (const p of pts) { if (!isFinite(p.x)) continue; n++; a = Math.min(a, p.x); b = Math.min(b, p.y); c = Math.max(c, p.x); d = Math.max(d, p.y); }
+      console.log(`DIAG2 ${l}: n=${n} x[${a.toFixed(0)}..${c.toFixed(0)}] y[${b.toFixed(0)}..${d.toFixed(0)}]`);
+    };
+    bb(segments.flatMap(s => [s.p1, s.p2]), 'segments@outline-build');
+  }
   const outline = chainByComponent(segments);
+  {
+    const bb = (pts: Array<{ x: number; y: number }>, l: string) => {
+      let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity, n = 0;
+      for (const p of pts) { if (!isFinite(p.x)) continue; n++; a = Math.min(a, p.x); b = Math.min(b, p.y); c = Math.max(c, p.x); d = Math.max(d, p.y); }
+      console.log(`DIAG2 ${l}: n=${n} x[${a.toFixed(0)}..${c.toFixed(0)}] y[${b.toFixed(0)}..${d.toFixed(0)}]`);
+    };
+    bb(outline, 'outline@build');
+  }
 
   // Build parts and per-pin pads. Pad geometry comes from the pin sub-block
   // (parsePinSubBlock decoded it). Pin.radius now scales to the actual pad —

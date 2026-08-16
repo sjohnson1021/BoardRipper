@@ -84,7 +84,14 @@ const MAX_PDF_TEXT_ENTRIES = 30;
 //     was ever read and the board died on "contains no parts or pins" (canary:
 //     XPS 15 9530 Compal HD055 LA-L663P). Those files never cached — they threw
 //     — but a mixed-ending file could have cached a partial board, so re-parse.
-const PARSER_VERSION = 88;
+// 89: XZZ arcs whose sweep exceeds 180° are no longer replaced by the opposite
+//     portion of their circle. The sweep was normalised by swapping the
+//     endpoints and clamping to ≤ 180° — a "shortest arc" rule — so every major
+//     arc rendered as its complement with the correct endpoints (canary:
+//     Mini4 Pro-PP003675.04 MB PCB layer, whose four board-end arcs sweep
+//     234.2° and 250.0°). Cached boards hold the wrong geometry and must
+//     re-parse.
+const PARSER_VERSION = 89;
 
 interface CachedBoard {
   key: string;

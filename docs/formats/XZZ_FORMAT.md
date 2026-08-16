@@ -62,6 +62,8 @@ Block types:
 - **Net block** — net index → net name mapping
 - **Part blocks** — component data with embedded pin sub-blocks
 - **Outline segments** — board outline geometry (line segments on layer 28)
+- **Arc blocks (`0x01`)** — centre/radius/start/end arcs, on the outline, the
+  silkscreen or a copper layer (see *Arc sweep direction* below)
 
 ---
 
@@ -96,6 +98,68 @@ Sequential entries, each containing:
 │ name bytes    │  Null-terminated string (netSize - 8 bytes)
 └──────────────┘
 ```
+
+### Arc blocks (`0x01`) — sweep direction
+
+```
+┌──────────────────┬──────────────────────────────────────────────────────┐
+│ u32: layer       │  28 = outline, 17 = silkscreen, 1–16 = copper/mask
+│ i32: cx, cy      │  Centre, ÷ 10000 → mils
+│ i32: radius      │
+│ i32: angleStart  │  Degrees ÷ 10000 — 1130129 = 113.0129°
+│ i32: angleEnd    │
+│ u32: width       │  Present on 32-byte (multi-layer) blocks
+│ u32: netIndex    │
+└──────────────────┴──────────────────────────────────────────────────────┘
+```
+
+**An arc is the counterclockwise sweep from `angleStart` to `angleEnd`, and the
+sweep is normalised into `[0, 360)` — never into `(−180, +180]`.**
+
+The stored quadruple names *two* arcs — the CCW one and the CW one — so the
+normalisation is not hygiene, it is the choice of which arc gets drawn. Two
+rules must both hold, and losing either one is enough to draw the wrong half:
+
+- **Lift negatives.** `angleEnd < angleStart` is an ordinary wrap, not a
+  reversed arc: `sweep = end − start; if (sweep < 0) sweep += 360`.
+- **Never reduce.** Nothing may pull the result back under 180°, and the
+  endpoints may not be swapped or the sweep `abs()`-ed. A swap discards exactly
+  the information that distinguishes the two candidate arcs.
+
+Both arcs share the same two endpoints, so the endpoints cannot detect the
+error — the **midpoint** is the discriminator, and the symptom is an arc that
+bulges the wrong way while terminating in the right places.
+
+`Mini4 Pro-PP003675.04 MB PCB layer` pins this. Its layer-28 arcs are four
+major arcs at the two ends of the outline plus two ordinary corner fillets;
+raw angles are ÷ 10000, and `xzz-arc-sweep.test.ts` asserts the midpoints.
+
+| id | centre (x, y) | r | start | end | sweep |
+|----|---------------|---|-------|-----|-------|
+| A | 532474990, 531872990 | 307610 | 1130129 | 3472309 | 234.218° |
+| B | 518264289, 531735380 | 331240 | 1615879 |  516079 | 250.020° |
+| C | 515725710, 531735380 | 331240 | 1283920 |  184120 | 250.020° |
+| D | 501515009, 531872990 | 307610 | 1927690 |  669870 | 234.218° |
+| E | 508875000, 533275000 | 235000 |       0 |  900000 |  90° |
+| F | 500995000, 501069060 | 519060 | 2250000 | 2700000 |  45° |
+
+A/D and B/C are mirror pairs about x = 516994999.5, and the exporter mirrors
+each angle **and** swaps start/end (`mirror(A.end) = D.start`). That swap is
+only meaningful if the stored order encodes a direction, which is the file's
+own evidence that these are directed CCW arcs rather than undirected chords.
+
+E and F are the diagnostic: a shortest-arc clamp gets both of them right and
+only breaks A–D, whereas a reflection applied without swapping the endpoints
+turns them into 270° and 315°. Which one is wrong tells you where to look.
+
+Until 2026-08-16 the parser swapped the endpoints when `start > end`, then
+added 360 to `start` whenever the remaining span still exceeded 180° — a
+shortest-arc normalisation wearing the clothes of angle wrapping. It has no
+negative-lift at all, so the swap broke B, C and D while the clamp separately
+broke A, and every arc over 180° rendered as its complement.
+
+*Diagnosis, arc-direction rules and test vector contributed by Sean Johnson
+(@sjohnson1021).*
 
 ### Outline integrity — the butterfly fold must not eat the loop
 
