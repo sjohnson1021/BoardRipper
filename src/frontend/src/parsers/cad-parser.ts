@@ -925,7 +925,22 @@ function drillFromPadstack(name: string): number {
   return m ? parseFloat(m[1]) : 10;
 }
 
-function tessellateArc(
+/** Canonical sweep of a GenCAD `ARC`: the counterclockwise span from `startAngle`
+ *  to `endAngle`, normalised into `[0, 2π)`.
+ *
+ *  `ARC x1 y1 x2 y2 xc yc` runs counterclockwise from (x1,y1) to (x2,y2), and the
+ *  quadruple names two arcs — so this normalisation *is* the choice of which one
+ *  gets drawn. Reducing the span below π ("shortest arc") substitutes the
+ *  complement for every arc that genuinely sweeps more than half the circle, and
+ *  turns the two endpoint-swapped half-circle records that exporters emit to draw
+ *  one full circle into the same half drawn twice. Lift negatives, never reduce.
+ *  Exported for cad-arc-sweep.test.ts. */
+export function gencadArcSweep(startAngle: number, endAngle: number): number {
+  const sweep = endAngle - startAngle;
+  return sweep < 0 ? sweep + 2 * Math.PI : sweep;
+}
+
+export function tessellateArc(
   x1: number, y1: number, x2: number, y2: number,
   cx: number, cy: number,
   width: number, net: string, layer: number,
@@ -939,13 +954,9 @@ function tessellateArc(
 
   const startAngle = Math.atan2(y1 - cy, x1 - cx);
   const endAngle = Math.atan2(y2 - cy, x2 - cx);
+  const sweep = gencadArcSweep(startAngle, endAngle);
 
-  // GenCAD convention: shorter arc (CCW by default)
-  let sweep = endAngle - startAngle;
-  if (sweep > Math.PI) sweep -= 2 * Math.PI;
-  if (sweep < -Math.PI) sweep += 2 * Math.PI;
-
-  const steps = Math.max(2, Math.ceil(Math.abs(sweep) / (Math.PI / 18)));
+  const steps = Math.max(2, Math.ceil(sweep / (Math.PI / 18)));
   const dAngle = sweep / steps;
 
   let prevX = x1, prevY = y1;

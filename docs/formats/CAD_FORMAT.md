@@ -142,6 +142,41 @@ SIGNAL <net_name>
 - Each `SIGNAL` block names a net
 - `NODE` entries list component.pin pairs belonging to that net
 
+### $ROUTES — `ARC` records and sweep direction
+
+```
+ARC <x1> <y1> <x2> <y2> <xc> <yc>
+```
+
+**An `ARC` is the counterclockwise sweep from (x1,y1) to (x2,y2) about (xc,yc),
+and the sweep is normalised into `[0, 2π)` — never into `(−π, +π]`.**
+
+The record stores no radius and no direction column: every one of the 24,450
+`$ROUTES` arcs in `2080.cad` and 13,136 in `7523v10.cad` has exactly seven
+fields. The endpoints alone name *two* arcs — the CCW one and the CW one — so
+the normalisation is not angle hygiene, it is the choice of which arc is drawn.
+`gencadArcSweep` lifts negatives and never reduces.
+
+Two things go wrong under a "shortest arc" clamp, and the second is the one that
+gives the format away:
+
+1. **Major arcs render as their complement.** 1,986 arcs in `2080.cad` and 956 in
+   `7523v10.cad` genuinely sweep more than 180°; the widest is 350.908°, which a
+   ±π clamp draws as a 9.09° sliver on the opposite side of the circle.
+2. **Full circles collapse to a doubled half-circle.** Exporters draw a circle as
+   *two* `ARC` records sharing a centre with their endpoints swapped —
+   3,038 such records in `2080.cad`, 2,756 in `7523v10.cad`. Both are exactly
+   180°, so the clamp leaves one at `+π` and the other at `−π`, and walking `−π`
+   backwards from the far endpoint retraces the *same* half. The circle comes out
+   as one semicircle stroked twice, with the other half never drawn.
+
+Point 2 is also the evidence for the CCW reading, independent of any spec: an
+exporter has no reason to emit the identical half-circle twice, but every reason
+to emit two complementary halves. Under `[0, 2π)` the pair tiles the circle —
+e.g. `ARC 8799.606 4274.409 8629.527 4274.409 8714.567 4274.409` and its twin
+sweep 180° each, with midpoints at y = 4359.448 (upper) and y = 4189.369 (lower)
+about cy = 4274.409.
+
 ### $DEVICES (BOM Info)
 
 ```

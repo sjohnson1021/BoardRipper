@@ -91,7 +91,14 @@ const MAX_PDF_TEXT_ENTRIES = 30;
 //     Mini4 Pro-PP003675.04 MB PCB layer, whose four board-end arcs sweep
 //     234.2° and 250.0°). Cached boards hold the wrong geometry and must
 //     re-parse.
-const PARSER_VERSION = 89;
+// 90: GenCAD `$ROUTES` arcs normalise their sweep into [0, 2π) instead of
+//     clamping to the shorter arc — the same defect as 89 in a separately
+//     written parser. Arcs sweeping more than 180° were drawn as their
+//     complement (1,986 of 24,450 on 2080.cad, widest 350.9° rendered as a
+//     9.1° sliver), and the endpoint-swapped record pairs that draw a full
+//     circle both rendered as the same half, so those circles were missing one
+//     side entirely. Cached GenCAD boards hold the wrong trace geometry.
+const PARSER_VERSION = 90;
 
 interface CachedBoard {
   key: string;
