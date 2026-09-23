@@ -40,6 +40,7 @@ import { useRenderSettings } from '../hooks/useRenderSettings';
 import { isGroundNet } from '../store/render-settings';
 import { colorToHex } from '../store/layer-store';
 import { accentTextColor } from '../store/color-math';
+import { AnnotationTables } from './AnnotationTables';
 import { DiagnosisNotes } from './DiagnosisNotes';
 import { NetBranchSection } from './NetBranchSection';
 import { ObdCell } from './ObdCell';
@@ -121,6 +122,7 @@ export function ComponentInfoBody({
     return (
       <div className="panel-content component-info" data-testid="component-info">
         <div className="panel-empty">Click a component to inspect</div>
+        <AnnotationTables board={board} />
         {obdNotes}
       </div>
     );

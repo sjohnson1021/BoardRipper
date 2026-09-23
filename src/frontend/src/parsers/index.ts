@@ -35,7 +35,7 @@ registerFormat(TVWFormat);
 registerFormat(AltiumPcbFormat);    // .PcbDoc/.CMPcbDoc/.CSPcbDoc — CFB magic, no extension clash
 registerFormat(KiCadPcbFormat);     // .kicad_pcb — "(kicad_pcb" root keyword, no extension clash
 
-export type { BoardData, BoardRevision, BomAlternateCluster, GhostComponent, Part, Pin, Net, Point, BBox, Pad, SilkscreenPath, Trace, Via, DiodeReading, DiodeReferenceChannel, DiodeSource } from './types';
+export type { BoardData, BoardRevision, BomAlternateCluster, GhostComponent, Part, Pin, Net, Point, BBox, Pad, SilkscreenPath, Trace, Via, DiodeReading, DiodeReferenceChannel, DiodeSource, BoardText, AnnotationTable, BoardAnnotations } from './types';
 export { computeBBox, buildNets, bomReasonLabel } from './types';
 export type { FormatDescriptor, FormatId } from './registry';
 export { getFormat, getAllFormats, getAllExtensions, getFileExtension } from './registry';
