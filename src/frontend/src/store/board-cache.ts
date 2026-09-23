@@ -114,7 +114,10 @@ const MAX_PDF_BYTES_TOTAL = 256 * 1024 * 1024;
 // 97: XZZ names, labels and board text decode GB2312 (with a plausibility
 //     check on strings valid as both), instead of lenient UTF-8 — Chinese and
 //     GB2312 `Ω` part values were garbled and then discarded.
-const PARSER_VERSION = 97;
+// 98: XZZ top-level test points (0x09) become single-pin parts named TP<n>,
+//     so they draw, select and join their net; legacy-folded boards now
+//     mirror them onto the bottom side.
+const PARSER_VERSION = 98;
 
 interface CachedBoard {
   key: string;
