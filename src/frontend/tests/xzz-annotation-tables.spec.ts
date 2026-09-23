@@ -72,3 +72,24 @@ test('a net with a glossary description shows it under the net name in the pin t
     await page.getByTestId('component-info').screenshot({ path: process.env.ANNOTATION_SHOT.replace(/\.png$/, '-pinnet.png') });
   }
 });
+
+test('the net glossary renders as a second, collapsible table under the fault table', async ({ page }) => {
+  test.skip(!haveSample, 'samples/XZZ PCB SAMPLES/iPhoneXSMAX not present');
+  await page.goto('/');
+  await page.getByTestId('file-input').setInputFiles(FILE);
+  await expect(page.getByTestId('statusbar')).toContainText('Components:', { timeout: 120000 });
+  await page.locator('.board-sidebar-toggle').first().click();
+  await page.locator('[data-board-tab="info"]').click();
+
+  const glossary = page.getByTestId('net-glossary');
+  await expect(glossary.locator('summary')).toHaveText('Net descriptions (505)');
+  await glossary.locator('summary').click();
+  await expect(glossary.getByTestId('net-glossary-entry')).toHaveCount(505);
+  // A described net this board carries is a chip; its description is tagged.
+  const entry = glossary.getByTestId('net-glossary-entry').filter({ has: page.locator('[data-net="PP_VDD_BOOST"]') });
+  await expect(entry.locator('[lang="zh-CN"]')).toHaveText('升压供电');
+
+  if (process.env.ANNOTATION_SHOT) {
+    await page.locator('.annotation-tables').screenshot({ path: process.env.ANNOTATION_SHOT.replace(/\.png$/, '-glossary.png') });
+  }
+});

@@ -13,8 +13,9 @@ import { NetChip, PartChip } from './DiagnosisNotes';
  * "PP_VDD_BOOST" no longer matches anything on the board.
  */
 export function AnnotationTables({ board }: { board: BoardData }) {
-  const a = board.annotations;
-  if (!a || (a.tables.length === 0 && a.notes.length === 0)) return null;
+  const a = board.annotations ?? { tables: [], notes: [] };
+  const glossary = board.netDescriptions;
+  if (a.tables.length === 0 && a.notes.length === 0 && !glossary?.size) return null;
   const partIndex = new Map(board.parts.map((p, i) => [p.name, i]));
   return (
     <div className="annotation-tables" data-testid="annotation-tables" style={{ marginTop: 8 }}>
@@ -30,7 +31,31 @@ export function AnnotationTables({ board }: { board: BoardData }) {
           </ul>
         </details>
       )}
+      {glossary && glossary.size > 0 && <GlossaryView glossary={glossary} board={board} />}
     </div>
+  );
+}
+
+/** The file's `===信号` net glossary as a second table. Collapsed: iPhoneXSMAX
+ *  carries 505 entries. A net this board has is a chip that highlights it;
+ *  the glossary is written for the whole board, so some are not, and stay text. */
+function GlossaryView({ glossary, board }: { glossary: ReadonlyMap<string, string>; board: BoardData }) {
+  // Two lines per entry rather than two columns: net names run to 35
+  // characters, wider than half of the sidebar.
+  return (
+    <details data-testid="net-glossary" style={{ fontSize: 11, marginTop: 6 }}>
+      <summary style={{ cursor: 'pointer', color: '#cde' }}>Net descriptions ({glossary.size})</summary>
+      <div style={{ marginTop: 4 }}>
+        {[...glossary].map(([net, text]) => (
+          <div key={net} data-testid="net-glossary-entry" style={{ borderBottom: '1px solid #333', padding: '3px 2px' }}>
+            <div translate="no" style={{ overflowWrap: 'anywhere' }}>
+              {board.nets.has(net) ? <NetChip netName={net} /> : <span style={{ color: '#888', fontFamily: 'monospace' }}>{net}</span>}
+            </div>
+            <div lang={langOf(text)} style={{ lineHeight: 1.4, paddingLeft: 2 }}>{text}</div>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 
