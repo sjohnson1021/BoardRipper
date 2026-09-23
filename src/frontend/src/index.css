@@ -1469,6 +1469,13 @@ body {
   text-decoration: underline;
 }
 
+.pin-net-desc {
+  color: var(--text-muted, #999);
+  font-size: 10px;
+  line-height: 1.3;
+  cursor: default;
+}
+
 /* ── Net branch section (Info tab, shown when a PIN is selected) ──────────
    The component block above keeps its own scroll box only while it is the
    whole tab. Once the net branch is present both blocks flow into the

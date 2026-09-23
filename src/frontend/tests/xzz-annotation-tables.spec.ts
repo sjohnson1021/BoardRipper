@@ -44,3 +44,31 @@ test('annotation table renders as an HTML table with lang and translate hints', 
     await page.screenshot({ path: process.env.ANNOTATION_SHOT.replace(/\.png$/, '-full.png') });
   }
 });
+
+test('a net with a glossary description shows it under the net name in the pin table', async ({ page }) => {
+  test.skip(!haveSample, 'samples/XZZ PCB SAMPLES/iPhoneXSMAX not present');
+  await page.goto('/');
+  await page.getByTestId('file-input').setInputFiles(FILE);
+  await expect(page.getByTestId('statusbar')).toContainText('Components:', { timeout: 120000 });
+  await page.locator('.board-sidebar-toggle').first().click();
+  await page.locator('[data-board-tab="info"]').click();
+
+  // Any part with a pin on a described net; select it the way the other specs do.
+  const target = await page.evaluate(() => {
+    const board = (window as unknown as { __boardStore: { activeTab: { board: {
+      parts: { name: string; pins: { net: string }[] }[]; netDescriptions?: Map<string, string>;
+    } } } }).__boardStore.activeTab.board;
+    const i = board.parts.findIndex(p => p.pins.some(pin => board.netDescriptions?.has(pin.net)));
+    const net = board.parts[i].pins.find(pin => board.netDescriptions?.has(pin.net))!.net;
+    return { partIndex: i, desc: board.netDescriptions!.get(net)! };
+  });
+  await page.evaluate((i) => (window as unknown as { __boardStore: { selectPart(i: number): void } }).__boardStore.selectPart(i), target.partIndex);
+
+  const desc = page.getByTestId('pin-net-desc').filter({ hasText: target.desc }).first();
+  await expect(desc).toBeVisible();
+  await expect(desc).toHaveAttribute('lang', 'zh-CN');
+
+  if (process.env.ANNOTATION_SHOT) {
+    await page.getByTestId('component-info').screenshot({ path: process.env.ANNOTATION_SHOT.replace(/\.png$/, '-pinnet.png') });
+  }
+});

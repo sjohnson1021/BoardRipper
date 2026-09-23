@@ -300,6 +300,14 @@ export function ComponentInfoBody({
                         {' · '}{netStats.comps} comp{netStats.comps === 1 ? '' : 's'}
                       </span>
                     )}
+                    {pin.net && board.netDescriptions?.has(pin.net) && (
+                      // The file's own note on what this net does. Vendor
+                      // prose, so tagged for the page translator; the net
+                      // name above stays as-is.
+                      <div className="pin-net-desc" data-testid="pin-net-desc" lang="zh-CN">
+                        {board.netDescriptions.get(pin.net)}
+                      </div>
+                    )}
                   </td>
                   {board.diodeReference && (
                     <td className="pin-diode" data-testid="pin-diode-cell"
