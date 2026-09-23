@@ -293,7 +293,11 @@ export function ComponentInfoBody({
                         {netOpen ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
                       </span>
                     )}
-                    {pin.net}
+                    {/* In its own element: "Translate page" swaps bare text
+                        nodes for <font> wrappers, and React then cannot insert
+                        the caret before it (NotFoundError, panel crash). A net
+                        name is an identifier, so it is not translated either. */}
+                    <span translate="no">{pin.net}</span>
                     {isSelected && branchNet && netStats && (
                       <span className="pin-net-counts" data-testid="net-counts">
                         {' · '}{netStats.pins} pin{netStats.pins === 1 ? '' : 's'}
